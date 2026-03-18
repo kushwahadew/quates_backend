@@ -49,12 +49,12 @@ const processAll = async (processId, quote) => {
         // 1. image
         console.log("🚀 Starting process:", processId);
 
-console.log("🖼 Generating image...");
-const imagePath = await generateImage(processId, quote);
+        console.log("🖼 Generating image...");
+        const imagePath = await generateImage(processId, quote);
 
-console.log("📁 Image ready:", imagePath);
+        console.log("📁 Image ready:", imagePath);
 
-console.log("☁️ Uploading image...");
+        console.log("☁️ Uploading image...");
 
         // 2. upload image
         const imageUpload = await cloudinary.uploader.upload(imagePath, {
@@ -77,8 +77,19 @@ console.log("☁️ Uploading image...");
             video: videoUpload.secure_url
         };
 
-        fs.unlinkSync(imagePath);
-        fs.unlinkSync(videoPath);
+        setTimeout(() => {
+            [imagePath, videoPath].forEach((file) => {
+                if (fs.existsSync(file)) {
+                    fs.unlink(file, (err) => {
+                        if (err) {
+                            console.error("❌ Delete error:", err);
+                        } else {
+                            console.log("🗑 Deleted:", file);
+                        }
+                    });
+                }
+            });
+        }, 2000);
 
     } catch (err) {
         console.error(err);
