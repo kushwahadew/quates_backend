@@ -1,260 +1,110 @@
 const express = require("express");
-const { createCanvas, loadImage, registerFont } = require("canvas");
+require("dotenv").config();
 const fs = require("fs");
-const path = require("path");
-const ffmpeg = require("fluent-ffmpeg");
-const ffmpegPath = require("ffmpeg-static");
+const generateImage = require("./final");
+const generateVideo = require("./reels");
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+const cloudinary = require("cloudinary").v2;
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 const app = express();
 app.use(express.json());
 
-registerFont("./fonts/NotoSansDevanagari-Regular.ttf", {
-    family: "NotoHindi"
-});
+const jobs = {};
 
-/* ==========================================================
-   📂 LOAD IMAGE GROUPS
-========================================================== */
-
-function loadImages(folder) {
-    const folderPath = path.join(__dirname, "assets", folder);
-    if (!fs.existsSync(folderPath)) return [];
-
-    return fs.readdirSync(folderPath)
-        .filter(file =>
-            file.endsWith(".png") ||
-            file.endsWith(".jpg") ||
-            file.endsWith(".jpeg")
-        )
-        .map(file => path.join(folderPath, file));
-}
-
-const imageGroups = {
-    mood: loadImages("mood"),
-    live: loadImages("live"),
-    happy: loadImages("happy")
-};
-
-/* ==========================================================
-   🎯 MOOD DETECTION
-========================================================== */
-
-function detectMood(quote) {
-    const q = quote.toLowerCase();
-
-    if (q.includes("money") || q.includes("discipline") || q.includes("focus"))
-        return "live";
-
-    if (q.includes("success") || q.includes("growth") || q.includes("win"))
-        return "happy";
-
-    return "mood";
-}
-
-function getRandomImage(category) {
-    let images = imageGroups[category];
-
-    if (!images || images.length === 0) {
-        if (imageGroups.happy.length > 0) images = imageGroups.happy;
-        else if (imageGroups.live.length > 0) images = imageGroups.live;
-        else if (imageGroups.mood.length > 0) images = imageGroups.mood;
-        else throw new Error("No images found.");
-    }
-
-    return images[Math.floor(Math.random() * images.length)];
-}
-
-/* ==========================================================
-   ✍️ TEXT WRAP
-========================================================== */
-
-function wrapLines(ctx, text, maxWidth) {
-    const words = text.split(" ");
-    let lines = [];
-    let line = "";
-
-    for (let word of words) {
-        const testLine = line + word + " ";
-        const width = ctx.measureText(testLine).width;
-
-        if (width > maxWidth && line !== "") {
-            lines.push(line.trim());
-            line = word + " ";
-        } else {
-            line = testLine;
-        }
-    }
-
-    lines.push(line.trim());
-    return lines;
-}
-
-/* ==========================================================
-   🚀 MAIN ROUTE
-========================================================== */
+/* ================= GENERATE ================= */
 
 app.post("/generate", async (req, res) => {
     const { quote } = req.body;
-    if (!quote) return res.status(400).json({ error: "Quote required" });
 
-    try {
-
-        /* ================= CANVAS ================= */
-
-        const canvas = createCanvas(1080, 1080);
-        const ctx = canvas.getContext("2d");
-
-        const TOP_PADDING = 80;
-        const SPACING = 80;
-        const BOTTOM_MARGIN = 60;
-
-        /* ================= BACKGROUND ================= */
-
-        const bg = await loadImage("./paper_background.png");
-        ctx.drawImage(bg, 0, 0, 1080, 1080);
-
-        /* ================= PROFILE ================= */
-
-        const profileImg = await loadImage("./profile.jpg");
-        const profileSize = 170;
-        const profileX = 90;
-        const profileY = TOP_PADDING;
-
-        ctx.beginPath();
-        ctx.arc(
-            profileX + profileSize / 2,
-            profileY + profileSize / 2,
-            profileSize / 2 + 6,
-            0,
-            Math.PI * 2
-        );
-        ctx.fillStyle = "white";
-        ctx.fill();
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(
-            profileX + profileSize / 2,
-            profileY + profileSize / 2,
-            profileSize / 2,
-            0,
-            Math.PI * 2
-        );
-        ctx.clip();
-        ctx.drawImage(profileImg, profileX, profileY, profileSize, profileSize);
-        ctx.restore();
-
-        const textStartX = profileX + profileSize + 40;
-        const profileCenterY = profileY + profileSize / 2;
-
-        ctx.textAlign = "left";
-        ctx.fillStyle = "#111";
-        ctx.font = "bold 46px Arial";
-        ctx.fillText("Dewraj Kushwaha", textStartX, profileCenterY - 10);
-
-        ctx.font = "26px Arial";
-        ctx.fillStyle = "#555";
-        ctx.fillText("SDE | FREELANCER", textStartX, profileCenterY + 30);
-
-        /* ================= RANDOM IMAGE ================= */
-
-        const category = detectMood(quote);
-        const imagePath = getRandomImage(category);
-        const silhouette = await loadImage(imagePath);
-
-        const imageScale = 0.60;
-        const finalSize = canvas.width * imageScale;
-        const imageY = canvas.height - finalSize - BOTTOM_MARGIN;
-        const imageX = (canvas.width - finalSize) / 2;
-
-        ctx.save();
-        ctx.filter = "grayscale(100%) contrast(100%) brightness(100%)";
-        ctx.drawImage(silhouette, imageX, imageY, finalSize, finalSize);
-        ctx.restore();
-
-        /* ================= QUOTE ================= */
-
-        ctx.font = "64px NotoHindi";
-        ctx.textAlign = "center";
-        ctx.fillStyle = "#111";
-
-        const lines = wrapLines(ctx, quote, 820);
-        const lineHeight = 96;
-
-        let currentY = profileY + profileSize + SPACING;
-
-        lines.forEach((line, index) => {
-
-            if (index === lines.length - 1) {
-                const textWidth = ctx.measureText(line).width;
-                const highlightPadding = 10;
-
-                ctx.fillStyle = "rgba(255, 235, 59, 0.6)";
-                ctx.fillRect(
-                    canvas.width / 2 - textWidth / 2 - highlightPadding,
-                    currentY - 40,
-                    textWidth + highlightPadding * 2,
-                    60
-                );
-
-                ctx.fillStyle = "#111";
-            }
-
-            ctx.fillText(line, canvas.width / 2, currentY);
-            currentY += lineHeight;
-        });
-
-        /* ================= VIDEO GENERATION ================= */
-
-        const tempImage = path.join(__dirname, "temp.png");
-        const tempVideo = path.join(__dirname, "final_video.mp4");
-
-        fs.writeFileSync(tempImage, canvas.toBuffer("image/png"));
-
-        const musicPath = path.join(__dirname, "assets/music/backgroundMusic.mp3");
-
-        ffmpeg()
-    .input(tempImage)
-    .loop(30)
-    .input(musicPath)
-    .videoCodec("libx264")
-    .audioCodec("aac")
-    .duration(30)
-    .outputOptions([
-        // 🔥 Smooth zoom animation
-        "-vf zoompan=z='min(zoom+0.0005,1.1)':d=900:fps=30,fade=t=in:st=0:d=2,fade=t=out:st=28:d=2",
-        "-pix_fmt yuv420p",
-        "-r 30",
-        "-shortest"
-    ])
-    .save(tempVideo)
-    .on("end", () => {
-
-        res.set({
-            "Content-Type": "video/mp4",
-            "Content-Disposition": "attachment; filename=quote_video.mp4"
-        });
-
-        const stream = fs.createReadStream(tempVideo);
-        stream.pipe(res);
-
-        stream.on("close", () => {
-            fs.unlinkSync(tempImage);
-            fs.unlinkSync(tempVideo);
-        });
-    })
-    .on("error", (err) => {
-        console.error("Video Error:", err);
-        res.status(500).json({ error: "Video generation failed" });
-    });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Something went wrong" });
+    if (!quote) {
+        return res.status(400).json({ error: "Quote required" });
     }
+
+    const processId = Date.now().toString();
+
+    jobs[processId] = {
+        status: "processing",
+        image: null,
+        video: null
+    };
+
+    processAll(processId, quote);
+
+    res.json({
+        processId,
+        status: "processing"
+    });
 });
 
-app.listen(3001, () => {
-    console.log("🔥 Final Quote Video Engine Running at http://localhost:3001");
+/* ================= PROCESS ================= */
+
+const processAll = async (processId, quote) => {
+    try {
+        // 1. image
+        console.log("🚀 Starting process:", processId);
+
+console.log("🖼 Generating image...");
+const imagePath = await generateImage(processId, quote);
+
+console.log("📁 Image ready:", imagePath);
+
+console.log("☁️ Uploading image...");
+
+        // 2. upload image
+        const imageUpload = await cloudinary.uploader.upload(imagePath, {
+            resource_type: "image",
+            timeout: 60000
+        });
+
+        // 3. video
+        const videoPath = await generateVideo(processId, imagePath);
+
+        // 4. upload video
+        const videoUpload = await cloudinary.uploader.upload(videoPath, {
+            resource_type: "video",
+            timeout: 120000
+        });
+
+        jobs[processId] = {
+            status: "completed",
+            image: imageUpload.secure_url,
+            video: videoUpload.secure_url
+        };
+
+        fs.unlinkSync(imagePath);
+        fs.unlinkSync(videoPath);
+
+    } catch (err) {
+        console.error(err);
+
+        jobs[processId] = {
+            status: "failed"
+        };
+    }
+};
+
+/* ================= RESULT ================= */
+
+app.get("/result/:id", (req, res) => {
+    const job = jobs[req.params.id];
+
+    if (!job) {
+        return res.status(404).json({ error: "Invalid ID" });
+    }
+
+    res.json(job);
+});
+
+/* ================= START ================= */
+
+const PORT = 3001 || 3002 || 3003;
+
+app.listen(PORT, () => {
+    console.log(`🔥 Main Server Running on ${PORT}`);
 });

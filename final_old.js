@@ -1,13 +1,18 @@
+const express = require("express");
 const { createCanvas, loadImage, registerFont } = require("canvas");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ FONT FIX
-registerFont(path.join(__dirname, "fonts/NotoSansDevanagari-Regular.ttf"), {
+const app = express();
+app.use(express.json());
+
+registerFont("./fonts/NotoSansDevanagari-Regular.ttf", {
     family: "NotoHindi"
 });
 
-/* ================= LOAD IMAGES ================= */
+/* ==========================================================
+   📂 LOAD IMAGE GROUPS DYNAMICALLY
+========================================================== */
 
 function loadImages(folder) {
     const folderPath = path.join(__dirname, "assets", folder);
@@ -29,7 +34,9 @@ const imageGroups = {
     happy: loadImages("happy")
 };
 
-/* ================= MOOD ================= */
+/* ==========================================================
+   🎯 MOOD DETECTION
+========================================================== */
 
 function detectMood(quote) {
     const q = quote.toLowerCase();
@@ -46,19 +53,40 @@ function detectMood(quote) {
 function getRandomImage(category) {
     let images = imageGroups[category];
 
+    // 🔥 If selected category empty → fallback order
     if (!images || images.length === 0) {
-        console.warn(`⚠️ ${category} empty → fallback`);
+        console.warn(`⚠️ ${category} is empty. Trying fallback...`);
 
-        if (imageGroups.happy.length > 0) images = imageGroups.happy;
-        else if (imageGroups.live.length > 0) images = imageGroups.live;
-        else if (imageGroups.mood.length > 0) images = imageGroups.mood;
-        else throw new Error("❌ No images found");
+        if (imageGroups.happy.length > 0) {
+            images = imageGroups.happy;
+            category = "happy";
+        } 
+        else if (imageGroups.live.length > 0) {
+            images = imageGroups.live;
+            category = "live";
+        } 
+        else if (imageGroups.mood.length > 0) {
+            images = imageGroups.mood;
+            category = "mood";
+        } 
+        else {
+            throw new Error("❌ No images found in any assets folder.");
+        }
     }
 
-    return images[Math.floor(Math.random() * images.length)];
+    const selected =
+        images[Math.floor(Math.random() * images.length)];
+
+    console.log("🎯 Selected category:", category);
+    console.log("🖼 Selected image:", selected);
+
+    return selected;
 }
 
-/* ================= TEXT WRAP ================= */
+
+/* ==========================================================
+   ✍️ TEXT WRAPPING
+========================================================== */
 
 function wrapLines(ctx, text, maxWidth) {
     const words = text.split(" ");
@@ -81,9 +109,14 @@ function wrapLines(ctx, text, maxWidth) {
     return lines;
 }
 
-/* ================= MAIN FUNCTION ================= */
+/* ==========================================================
+   🚀 MAIN ROUTE
+========================================================== */
 
-const generateImage = async (processId, quote) => {
+app.post("/generate", async (req, res) => {
+    const { quote } = req.body;
+    if (!quote) return res.status(400).json({ error: "Quote required" });
+
     try {
         const canvas = createCanvas(1080, 1080);
         const ctx = canvas.getContext("2d");
@@ -92,12 +125,14 @@ const generateImage = async (processId, quote) => {
         const SPACING = 80;
         const BOTTOM_MARGIN = 60;
 
-        /* BACKGROUND */
-        const bg = await loadImage(path.join(__dirname, "paper_background.png"));
+        /* ================= BACKGROUND ================= */
+
+        const bg = await loadImage("./paper_background.png");
         ctx.drawImage(bg, 0, 0, 1080, 1080);
 
-        /* PROFILE */
-        const profileImg = await loadImage(path.join(__dirname, "profile.jpg"));
+        /* ================= PROFILE ================= */
+
+        const profileImg = await loadImage("./profile.jpg");
 
         const profileSize = 170;
         const profileX = 90;
@@ -127,7 +162,6 @@ const generateImage = async (processId, quote) => {
         ctx.drawImage(profileImg, profileX, profileY, profileSize, profileSize);
         ctx.restore();
 
-        /* TEXT */
         const textStartX = profileX + profileSize + 40;
         const profileCenterY = profileY + profileSize / 2;
 
@@ -140,12 +174,15 @@ const generateImage = async (processId, quote) => {
         ctx.fillStyle = "#555";
         ctx.fillText("SDE | FREELANCER", textStartX, profileCenterY + 30);
 
-        /* IMAGE */
-        const category = detectMood(quote);
-        const imgPath = getRandomImage(category);
-        const silhouette = await loadImage(imgPath);
+        /* ================= DYNAMIC IMAGE ================= */
 
-        const finalSize = canvas.width * 0.60;
+        const category = detectMood(quote);
+        const imagePath = getRandomImage(category);
+        const silhouette = await loadImage(imagePath);
+
+        const imageScale = 0.60;
+        const finalSize = canvas.width * imageScale;
+
         const imageY = canvas.height - finalSize - BOTTOM_MARGIN;
         const imageX = (canvas.width - finalSize) / 2;
 
@@ -154,45 +191,59 @@ const generateImage = async (processId, quote) => {
         ctx.drawImage(silhouette, imageX, imageY, finalSize, finalSize);
         ctx.restore();
 
-        /* QUOTE */
+        /* ================= QUOTE ================= */
+
+        const maxWidth = 820;
+
         ctx.font = "64px NotoHindi";
         ctx.textAlign = "center";
         ctx.fillStyle = "#111";
 
-        const lines = wrapLines(ctx, quote, 820);
-        let currentY = profileY + profileSize + SPACING;
+        const lines = wrapLines(ctx, quote, maxWidth);
+        const lineHeight = 64 * 1.5;
+
+        const quoteStartY = profileY + profileSize + SPACING;
+        let currentY = quoteStartY;
 
         lines.forEach((line, index) => {
+
             if (index === lines.length - 1) {
-                const width = ctx.measureText(line).width;
+
+                const textWidth = ctx.measureText(line).width;
+                const highlightPadding = 10;
 
                 ctx.fillStyle = "rgba(255, 235, 59, 0.6)";
                 ctx.fillRect(
-                    canvas.width / 2 - width / 2 - 10,
-                    currentY - 40,
-                    width + 20,
-                    60
+                    canvas.width / 2 - textWidth / 2 - highlightPadding,
+                    currentY - lineHeight / 1.8,
+                    textWidth + highlightPadding * 2,
+                    lineHeight / 1.3
                 );
 
                 ctx.fillStyle = "#111";
             }
 
             ctx.fillText(line, canvas.width / 2, currentY);
-            currentY += 96;
+            currentY += lineHeight;
         });
 
-        /* SAVE */
-        const filePath = path.join(__dirname, `image_${processId}.png`);
-        fs.writeFileSync(filePath, canvas.toBuffer("image/png"));
-        if (!fs.existsSync(filePath)) {
-            throw new Error("Image not saved properly");
-        }
-        return filePath;
+        /* ================= OUTPUT ================= */
+
+        const buffer = canvas.toBuffer("image/png");
+
+        res.set({
+            "Content-Type": "image/png",
+            "Content-Disposition": "attachment; filename=quote.png"
+        });
+
+        res.send(buffer);
 
     } catch (err) {
-        console.error("❌ Image generation failed:", err);
-        throw err;
+        console.error(err);
+        res.status(500).json({ error: "Image generation failed" });
     }
-};
+});
 
-module.exports = generateImage;
+app.listen(3001, () => {
+    console.log("🔥 Final Quote Engine Running at http://localhost:3001");
+});
