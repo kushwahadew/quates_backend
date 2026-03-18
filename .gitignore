@@ -1,0 +1,36 @@
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Build / temp
+dist/
+build/
+tmp/
+temp/
+
+# Cache
+.cache/
+
+# Optional: images (if generated dynamically)
+# *.png
+# *.jpg
+
+# System files
+*.swp
