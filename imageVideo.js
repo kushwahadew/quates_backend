@@ -3,6 +3,12 @@ require("dotenv").config();
 const fs = require("fs");
 const generateImage = require("./final");
 const generateVideo = require("./reels");
+const { createClient } = require("@supabase/supabase-js");
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_KEY
+);
 
 const cloudinary = require("cloudinary").v2;
 
@@ -28,20 +34,29 @@ app.post("/generate", async (req, res) => {
 
     const processId = Date.now().toString();
 
-    jobs[processId] = {
-        status: "processing",
-        image: null,
-        video: null
-    };
+    // Supabase insert
+    const { data, error } = await supabase.from("jobs").insert([
+        {
+            id: processId,
+            status: "processing"
+        }
+    ]);
 
+    if (error) {
+        console.error("❌ Supabase insert error:", error);
+    } else {
+        console.log("✅ Job inserted:", data);
+    }
+
+    // background process
     processAll(processId, quote);
 
+    // ✅ VERY IMPORTANT
     res.json({
         processId,
         status: "processing"
     });
 });
-
 /* ================= PROCESS ================= */
 
 const processAll = async (processId, quote) => {
@@ -54,28 +69,30 @@ const processAll = async (processId, quote) => {
 
         console.log("📁 Image ready:", imagePath);
 
-        console.log("☁️ Uploading image...");
+       console.log("☁️ Uploading image...");
+const imageUpload = await cloudinary.uploader.upload(imagePath, {
+    resource_type: "image",
+    timeout: 30000
+});
+console.log("✅ Image URL:", imageUpload.secure_url);
 
-        // 2. upload image
-        const imageUpload = await cloudinary.uploader.upload(imagePath, {
-            resource_type: "image",
-            timeout: 60000
-        });
+console.log("🎬 Generating video...");
+const videoPath = await generateVideo(processId, imagePath);
 
-        // 3. video
-        const videoPath = await generateVideo(processId, imagePath);
+const videoUpload = await cloudinary.uploader.upload(videoPath, {
+    resource_type: "video",
+    timeout: 60000
+});
+console.log("🎥 Video URL:", videoUpload.secure_url);
 
-        // 4. upload video
-        const videoUpload = await cloudinary.uploader.upload(videoPath, {
-            resource_type: "video",
-            timeout: 120000
-        });
-
-        jobs[processId] = {
-            status: "completed",
-            image: imageUpload.secure_url,
-            video: videoUpload.secure_url
-        };
+        await supabase
+            .from("jobs")
+            .update({
+                status: "completed",
+                image: imageUpload.secure_url,
+                video: videoUpload.secure_url
+            })
+            .eq("id", processId);
 
         setTimeout(() => {
             [imagePath, videoPath].forEach((file) => {
@@ -102,16 +119,19 @@ const processAll = async (processId, quote) => {
 
 /* ================= RESULT ================= */
 
-app.get("/result/:id", (req, res) => {
-    const job = jobs[req.params.id];
+app.get("/result/:id", async (req, res) => {
+    const { data, error } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", req.params.id)
+        .single();
 
-    if (!job) {
-        return res.status(404).json({ error: "Invalid ID" });
+    if (error || !data) {
+        return res.status(404).json({ error: "Not found" });
     }
 
-    res.json(job);
+    res.json(data);
 });
-
 /* ================= START ================= */
 
 const PORT = 3001 || 3002 || 3003;
