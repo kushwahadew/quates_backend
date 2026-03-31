@@ -3,10 +3,13 @@ const fs = require("fs");
 const path = require("path");
 
 // ✅ FONT FIX
+registerFont(path.join(__dirname, "fonts/Ams_Vasudeva.ttf"), {
+    family: "Ams_Vasudeva"
+});
+
 registerFont(path.join(__dirname, "fonts/NotoSansDevanagari-Regular.ttf"), {
     family: "NotoHindi"
 });
-
 /* ================= LOAD IMAGES ================= */
 
 function loadImages(folder) {
