@@ -2,14 +2,16 @@ const { createCanvas, loadImage, registerFont } = require("canvas");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ FONT FIX
-registerFont(path.join(__dirname, "fonts/Ams_Vasudeva.ttf"), {
-    family: "Ams_Vasudeva"
+/* ================= FONT REGISTRATION ================= */
+
+registerFont(path.join(__dirname, "fonts/InknutAntiqua-Regular.ttf"), {
+    family: "Inknut"
 });
 
 registerFont(path.join(__dirname, "fonts/NotoSansDevanagari-Regular.ttf"), {
     family: "NotoHindi"
 });
+
 /* ================= LOAD IMAGES ================= */
 
 function loadImages(folder) {
@@ -130,7 +132,7 @@ const generateImage = async (processId, quote) => {
         ctx.drawImage(profileImg, profileX, profileY, profileSize, profileSize);
         ctx.restore();
 
-        /* TEXT */
+        /* HEADER TEXT */
         const textStartX = profileX + profileSize + 40;
         const profileCenterY = profileY + profileSize / 2;
 
@@ -157,39 +159,58 @@ const generateImage = async (processId, quote) => {
         ctx.drawImage(silhouette, imageX, imageY, finalSize, finalSize);
         ctx.restore();
 
-        /* QUOTE */
-        ctx.font = "64px NotoHindi";
+        /* ================= QUOTE ================= */
+
+        // ✅ Detect English
+        const hasEnglish = /[A-Za-z]/.test(quote);
+
+        // ✅ Apply font
+        // ctx.font = hasEnglish
+        //     ? "700 60px 'Inknut'"
+        //     : "bold 64px 'NotoHindi'";
+        ctx.font = "500 52px 'Inknut'";
         ctx.textAlign = "center";
         ctx.fillStyle = "#111";
 
+        // ✅ Styling
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetY = 3;
+
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "rgba(0,0,0,0.3)";
+
+        // ✅ Wrap text
         const lines = wrapLines(ctx, quote, 820);
+
         let currentY = profileY + profileSize + SPACING;
 
+        // ✅ Render text
         lines.forEach((line, index) => {
             if (index === lines.length - 1) {
                 const width = ctx.measureText(line).width;
 
-                ctx.fillStyle = "rgba(255, 235, 59, 0.6)";
+                ctx.fillStyle = "rgba(255, 215, 0, 0.5)";
                 ctx.fillRect(
-                    canvas.width / 2 - width / 2 - 10,
-                    currentY - 40,
-                    width + 20,
-                    60
+                    canvas.width / 2 - width / 2 - 20,
+                    currentY - 50,
+                    width + 40,
+                    70
                 );
 
                 ctx.fillStyle = "#111";
             }
 
+            ctx.strokeText(line, canvas.width / 2, currentY);
             ctx.fillText(line, canvas.width / 2, currentY);
+
             currentY += 96;
         });
 
         /* SAVE */
         const filePath = path.join(__dirname, `image_${processId}.png`);
         fs.writeFileSync(filePath, canvas.toBuffer("image/png"));
-        if (!fs.existsSync(filePath)) {
-            throw new Error("Image not saved properly");
-        }
+
         return filePath;
 
     } catch (err) {

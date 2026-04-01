@@ -70,10 +70,10 @@ const processAll = async (processId, quote) => {
         console.log("📁 Image ready:", imagePath);
 
         console.log("☁️ Uploading image...");
-        const imageUpload = await cloudinary.uploader.upload(imagePath, {
-            resource_type: "image",
-            timeout: 20000
-        });
+        // const imageUpload = await cloudinary.uploader.upload(imagePath, {
+        //     resource_type: "image",
+        //     timeout: 20000
+        // });
         console.log("✅ Image URL:", imageUpload.secure_url);
 
         console.log("🎬 Generating video...");
